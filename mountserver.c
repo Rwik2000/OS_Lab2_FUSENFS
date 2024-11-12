@@ -13,7 +13,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 
-#define MAX_FILEPATH_LENGTH 4096
+#define MAX_FILEPATH_LENGTH 8192
 
 struct options {
     char *username;
@@ -30,6 +30,30 @@ static const struct fuse_opt option_spec[] = {
     OPTION("--local-cache=%s", local_cache),
     FUSE_OPT_END
 };
+
+// Remove everything from cache before starting
+void clear_local_cache(const char *path) {
+    DIR *dir = opendir(path);
+    if (!dir) {
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Skipping "." and ".."
+        if (strcmp(entry->d_name, ".") == 0) {
+            continue;
+        }
+        if (strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        char file_path[MAX_FILEPATH_LENGTH];
+        remove(file_path)
+    }
+
+    closedir(dir);
+}
 
 static void *myfs_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     (void) conn;
@@ -121,6 +145,8 @@ int main(int argc, char *argv[]) {
     if (fuse_opt_parse_ret == -1){
         return 1;
     }
+
+    clear_local_cache(options.local_cache);
 
     int ret = fuse_main(args.argc, args.argv, &myfs_operations, NULL);
     fuse_opt_free_args(&args);

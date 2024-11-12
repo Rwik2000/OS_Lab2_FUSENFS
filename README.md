@@ -10,3 +10,9 @@ gcc -o myfs mountserver.c `pkg-config fuse3 --cflags --libs`
 ```shell
 stat ~/fusenfs_mount
 ```
+
+## readdir
+
+```shell
+ls ~/fusenfs_mount
+```
