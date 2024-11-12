@@ -64,13 +64,47 @@ static int myfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_i
     return 0;
 }
 
+static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+                        off_t offset, struct fuse_file_info *fi, 
+                        enum fuse_readdir_flags flags) {
+
+    // give complete path
+    if (strcmp(path, "/") != 0)
+        return -ENOENT;
+    
+    // Adding . and .. , so that it comes up in `ls` command
+    filler(buf, ".", NULL, 0, 0);
+    filler(buf, "..", NULL, 0, 0);
+
+    // opening up local cache directory
+    DIR *dp = opendir(options.local_cache);
+    if (dp == NULL) {
+        return -errno;
+    }
+
+    struct dirent *de;
+    // Going through the directory
+    // https://stackoverflow.com/questions/8420234/why-shift-12-bit-for-d-type-in-fusexmp
+    while ((de = readdir(dp)) != NULL) {
+        struct stat st;
+        st.st_ino = de->d_ino;
+        st.st_mode = de->d_type << 12;
+
+        if (filler(buf, de->d_name, &st, 0, 0)) {
+            break; }
+    }
+
+    closedir(dp);
+
+    return 0;
+}
 
 static struct fuse_operations myfs_operations = {
     .init = myfs_init,
     .getattr = myfs_getattr,
     // .create = myfs_create,
     // .write = myfs_write,
-    // .readdir = myfs_readdir,
+    .readdir = myfs_readdir,
     // .read = myfs_read
 };
 
