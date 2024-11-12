@@ -42,6 +42,18 @@ static void *myfs_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
 static int myfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi) {
     printf("myfs_getattr called with path: %s\n", path);
 
+    // Turns out you have to deal with root dir!
+    // https://www.qualys.com/2021/07/20/cve-2021-33910/cve-2021-33910-crasher.c
+    // 0755 is basically giving read,write privilege i.e. it is like chmod +x 
+    // https://superuser.com/questions/404592/chmod-equivalence-of-x-and-0755
+
+    memset(stbuf, 0, sizeof(struct stat));
+    if (strcmp(path, "/") == 0) {
+        stbuf->st_mode = S_IFDIR | 0755; // Directory with permissions
+        stbuf->st_nlink = 2; // Default link count for directories
+        return 0;
+    }
+
     char cache_fp[MAX_FILEPATH_LENGTH];
     
     int res = stat(cache_fp, stbuf);
