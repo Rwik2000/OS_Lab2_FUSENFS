@@ -14,6 +14,7 @@
 #include <sys/types.h>
 
 #define MAX_FILEPATH_LENGTH 8192
+#define MAX_COMMAND_LENGTH (MAX_FILEPATH_LENGTH * 2 + 32)
 
 struct options {
     char *username;
@@ -32,28 +33,36 @@ static const struct fuse_opt option_spec[] = {
 };
 
 // Remove everything from cache before starting
+// Clear all files from the local cache directory
 void clear_local_cache(const char *path) {
     DIR *dir = opendir(path);
     if (!dir) {
+        perror("Error opening cache directory in clear_local_cache");
         return;
     }
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        // Skipping "." and ".."
-        if (strcmp(entry->d_name, ".") == 0) {
-            continue;
-        }
-        if (strcmp(entry->d_name, "..") == 0) {
+        // Skip "." and ".."
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
 
+        // Construct the full path to the file
         char file_path[MAX_FILEPATH_LENGTH];
-        remove(file_path)
+        snprintf(file_path, sizeof(file_path), "%s/%s", path, entry->d_name);
+
+        // Remove the file
+        if (remove(file_path) == -1) {
+            perror("Error removing file in clear_local_cache");
+        } else {
+            printf("Removed file: %s\n", file_path);
+        }
     }
 
     closedir(dir);
 }
+
 
 static void *myfs_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     (void) conn;
@@ -79,7 +88,8 @@ static int myfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_i
     }
 
     char cache_fp[MAX_FILEPATH_LENGTH];
-    
+    snprintf(cache_fp, sizeof(cache_fp), "%s%s", options.local_cache, path);
+
     int res = stat(cache_fp, stbuf);
     if (res == -1) {
         perror("Error in myfs_getattr - stat");
@@ -95,6 +105,14 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     // give complete path
     if (strcmp(path, "/") != 0)
         return -ENOENT;
+
+    // Synchronize remote directory to local cache
+    char command[MAX_COMMAND_LENGTH];
+    snprintf(command, sizeof(command), "rsync -a --delete %s/ %s/", options.remote_path, options.local_cache);
+    int result = system(command);
+    if (result != 0) {
+        return -errno;
+    }
     
     // Adding . and .. , so that it comes up in `ls` command
     filler(buf, ".", NULL, 0, 0);
@@ -123,11 +141,73 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
 }
 
+// Create, Write and Read Files
+static int myfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+
+    char cache_fp[MAX_FILEPATH_LENGTH];
+    snprintf(cache_fp, sizeof(cache_fp), "%s%s", options.local_cache, path);
+
+    int fd = creat(cache_fp, mode);
+    if (fd == -1) {
+        perror("Error creating file in myfs_create");
+        return -errno;
+    }
+    close(fd);
+
+    char remote_fp[MAX_FILEPATH_LENGTH];
+    snprintf(remote_fp, sizeof(remote_fp), "%s%s", options.remote_path, path);
+
+    char command[MAX_COMMAND_LENGTH];
+    snprintf(command, sizeof(command), "rsync '%s' '%s'", cache_fp, remote_fp);
+    // rsync
+    int result = system(command);
+    if (result != 0) {
+        fprintf(stderr, "Error syncing file to remote path in myfs_create\n");
+        return -errno;
+    }
+
+    return 0;
+}
+
+static int myfs_write(const char *path, const char *buf, size_t size, off_t offset,
+                      struct fuse_file_info *fi) {
+    char cache_fp[MAX_FILEPATH_LENGTH];
+    snprintf(cache_fp, sizeof(cache_fp), "%s%s", options.local_cache, path);
+
+    int fd = open(cache_fp, O_WRONLY);
+    if (fd < 0) {
+        perror("Error opening file");
+        return -errno;
+    }
+
+    int res = pwrite(fd, buf, size, offset);
+    if (res == -1) {
+        perror("Error writing to file");
+        close(fd);
+        return -errno;
+    }
+    close(fd);
+
+    char remote_fp[MAX_FILEPATH_LENGTH];
+    snprintf(remote_fp, sizeof(remote_fp), "%s%s", options.remote_path, path);
+
+    char command[MAX_COMMAND_LENGTH];
+    // cache to remote
+    snprintf(command, sizeof(command), "rsync '%s' '%s'", cache_fp, remote_fp);
+    int result = system(command);
+    if (result != 0) {
+        fprintf(stderr, "Error syncing file to remote path\n");
+        return -errno;
+    }
+
+    return res;
+}
+
 static struct fuse_operations myfs_operations = {
     .init = myfs_init,
     .getattr = myfs_getattr,
-    // .create = myfs_create,
-    // .write = myfs_write,
+    .create = myfs_create,
+    .write = myfs_write,
     .readdir = myfs_readdir,
     // .read = myfs_read
 };
