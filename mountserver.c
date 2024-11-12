@@ -149,7 +149,7 @@ static int myfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     int fd = creat(cache_fp, mode);
     if (fd == -1) {
-        perror("Error creating file in myfs_create");
+        perror("Error creating file");
         return -errno;
     }
     close(fd);
@@ -162,7 +162,7 @@ static int myfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     // rsync
     int result = system(command);
     if (result != 0) {
-        fprintf(stderr, "Error syncing file to remote path in myfs_create\n");
+        fprintf(stderr, "ERsync problem in myfs_create\n");
         return -errno;
     }
 
