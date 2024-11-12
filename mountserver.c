@@ -1,4 +1,5 @@
 // https://man.openbsd.org/fuse_main.3
+//https://libfuse.github.io/doxygen/structfuse__operations.html
 #define FUSE_USE_VERSION 31
 #include <errno.h>
 #include <fuse3/fuse.h>
@@ -11,6 +12,8 @@
 #include <stddef.h>
 #include <dirent.h>
 #include <sys/types.h>
+
+#define MAX_FILEPATH_LENGTH 4096
 
 struct options {
     char *username;
@@ -36,10 +39,23 @@ static void *myfs_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     return NULL;
 }
 
+static int myfs_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi) {
+    printf("myfs_getattr called with path: %s\n", path);
+
+    char cache_fp[MAX_FILEPATH_LENGTH];
+    
+    int res = stat(cache_fp, stbuf);
+    if (res == -1) {
+        perror("Error in myfs_getattr - stat");
+        return -errno;
+    }
+    return 0;
+}
+
 
 static struct fuse_operations myfs_operations = {
     .init = myfs_init,
-    // .getattr = myfs_getattr,
+    .getattr = myfs_getattr,
     // .create = myfs_create,
     // .write = myfs_write,
     // .readdir = myfs_readdir,
