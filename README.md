@@ -16,3 +16,16 @@ stat ~/fusenfs_mount
 ```shell
 ls ~/fusenfs_mount
 ```
+
+## create
+
+```shell
+touch ~/fusenfs_mount/newfile.txt
+```
+
+## write
+
+```shell
+echo "Hello, World!" > ~/fusenfs_mount/newfile.txt
+vim ~/fusenfs_mount/newfile.txt
+```

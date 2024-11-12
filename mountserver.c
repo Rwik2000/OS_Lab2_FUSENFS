@@ -203,13 +203,34 @@ static int myfs_write(const char *path, const char *buf, size_t size, off_t offs
     return res;
 }
 
+static int myfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    char cache_fp[MAX_FILEPATH_LENGTH];
+    
+    snprintf(cache_fp, sizeof(cache_fp), "%s%s", options.local_cache, path);
+
+    int fd = open(cache_fp, O_RDONLY);
+    if (fd == -1) {
+        perror("Error in myfs_read - open");
+        return -errno;
+    }
+
+    int res = pread(fd, buf, size, offset);
+    if (res == -1) {
+        perror("Error in myfs_read - pread");
+        res = -errno;
+    }
+
+    close(fd);
+    return res;
+}
+
 static struct fuse_operations myfs_operations = {
     .init = myfs_init,
     .getattr = myfs_getattr,
     .create = myfs_create,
     .write = myfs_write,
     .readdir = myfs_readdir,
-    // .read = myfs_read
+    .read = myfs_read
 };
 
 int main(int argc, char *argv[]) {
